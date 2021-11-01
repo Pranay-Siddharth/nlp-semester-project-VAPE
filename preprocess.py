@@ -3,35 +3,11 @@ import spacy,benepar
 from spacy.matcher import Matcher
 nlp = spacy.load("en_core_web_sm")
 nlp.add_pipe('benepar', config={'model': 'benepar_en3'})
-class Word():#Also only does a so-so job, leaves commas attached to the words they are part of
-    def __init__(self,text):
-        self.text=text
-    def __repr__(self):
-        return "("+self.text+")"
-class Sentence():
-    def __init__(self,text):
-        self.text=text
-        self.words=re.split(" ",text)
-        self.words=[Word(word) for word in self.words if len(word)>0]
-    def __repr__(self):
-        return self.text
 
 class Document():
     def __init__(self,text):
         self.text=text
-
         self.doc=nlp(text)
-        """for token in self.doc:
-            print(token.text, token.lemma_, token.pos_, token.tag_, token.dep_,
-            token.shape_, token.is_alpha, token.is_stop)"""
-        self.sentences=[]
-        parts=re.split("\.|\n",text)
-        #This segmentation is weak, it splits "p.m." and "6.2" into two sentences. 
-        #It lackes any context
-        #Perhaps replace with spacy?
-        for part in parts:
-            if(len(part)>0):
-                self.sentences.append(Sentence(part))
     def answer(self,question):
         q=nlp(question)
         #print(dir(q))
