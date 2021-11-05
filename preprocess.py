@@ -1,7 +1,7 @@
 import re
 import spacy,benepar
 from spacy.matcher import Matcher
-nlp = spacy.load("en_core_web_sm")
+nlp = spacy.load("en_core_web_lg")
 nlp.add_pipe('benepar', config={'model': 'benepar_en3'})
 
 class Document():
@@ -20,17 +20,17 @@ class Document():
                     clause=child
             (best_sent,best_phrase,best_sentval)=(None,None,0)
             if clause is not None:
+                noun=None
                 for child in clause._.children:
                     if("NP" in child._.labels):
                         noun=child 
                         break
-                for sent in self.doc.sents:
-                    matchnum=phrase_score(sent,clause)
-                    if(matchnum[0]>best_sentval):
+                for qsent in self.doc.sents:
+                    matchnum=phrase_score(qsent,sent)
+                    if(matchnum>best_sentval):
                         #print(matchnum)
-                        best_sentval=matchnum[0]
-                        best_sent=sent
-                        best_phrase=matchnum[1]
+                        best_sentval=matchnum
+                        best_sent=qsent
                 print("question is: ",question)
                 #print(clause._.parse_string)
                 print("best sentence is: ",best_sent)
@@ -47,13 +47,14 @@ class Document():
                             answer=str(noun)+" "+str(vp)
                             break
                 else:
+                    print("verb is: ",verb)
+                    bestscore=-1
                     for i in range(len(best_sent)-len(verb)+1):
-                        phraselemma=best_sent[i:i+len(verb)].lemma_
-                        if(verb.lemma_ == phraselemma):
-                            print("found verb phrase!")
+                        score=verb.similarity(best_sent[i:i+len(verb)])
+                        if(score>bestscore):
+                            bestscore=score
                             vp=containing_type(best_sent[i],"VP")
                             answer=str(noun)+" is "+str(vp)
-                            break
                 if vp is None:
                     print("error in finding VP")
                     return
@@ -61,26 +62,31 @@ class Document():
                 print("Answer is: ",answer)
                 return answer
 
-
 def phrase_score(phrase1,phrase2):
     child1=expand_children(phrase1)
     child2=expand_children(phrase2)
-    lemma1=set([word.lemma_ for word in child1])
+    #print(child1,child2)
     overlap=[]
-    banlist=["be"]
-    for word in child2:
-        if word.lemma_ in lemma1 and word.lemma_ not in banlist:
-            overlap.append(word)
-    #print(overlap)
-    score=0
-    max_len=0
-    best_phrase=None
-    for phrase in overlap:
-        score+=len(phrase)
-        if(len(phrase)>max_len):
-            max_len=len(phrase)
-            best_phrase=phrase
-    return (score,best_phrase)
+    thresh=.95
+    for word1 in child1:
+        for word2 in child2:
+            score=word1.similarity(word2)
+            if(score>thresh or word1.lemma_==word2.lemma_):
+                if(len(word1)<len(word2)):
+                    overlap.append(word1)
+                else:
+                    overlap.append(word2)
+    dedup_overlap=[]
+    dedup_lemma=set(["be"])
+    for word in overlap:
+        if word.lemma_ not in dedup_lemma:
+            dedup_lemma.add(word.lemma_)
+            dedup_overlap.append(word)
+    if(len(dedup_overlap)>0):
+        pass
+        #print(dedup_overlap)
+    score=sum([len(phrase) for phrase in dedup_overlap])
+    return score
 def expand_children(words):
     L=[words]
     for child in words._.children:
@@ -137,10 +143,10 @@ answerer.answer("What is cancer bordered by?")
 #answerer.answer("What is the brightest star in Cancer?")
 answerer.answer("What is cancers astrological symbol?")
 #answerer.answer("Who placed the crab among the stars?")
-answerer.answer("What latitudes can Beta Cancri be seen between?")
+answerer.answer("What latitudes can cancer be seen at?")
 answerer.answer("What open cluster is located right in the centre of cancer?")
-answerer.answer("What month was cancer assosciated with?")
-answerer.answer("What type of star is 55 Cancri?")
+answerer.answer("What month was cancer associated with?")
+answerer.answer("What did Heracles battle?")
 """
 s1="Cancer is a medium-sized constellation that is bordered by Gemini to the west, Lynx to the north, Leo Minor to the northeast, Leo to the east, Hydra to the south, and Canis Minor to the southwest."
 print(list(nlp(s1).sents)[0]._.parse_string)
