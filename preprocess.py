@@ -9,6 +9,7 @@ class Document():
         self.text=text
         self.doc=nlp(text)
     def answer(self,question):
+        print()
         q=nlp(question)
         #print(dir(q))
         sent=list(q.sents)[0]
@@ -39,14 +40,22 @@ class Document():
                 verb=locate_type(clause,"VP")
                 answer=None
                 vp=None
+                q_lemma=set([word.lemma_ for word in q])
                 if(verb is None):
-                    for word in best_sent:
-                        if(word.lemma_ =="be"):
-                            print("found is!")
-                            vp=containing_type(word,"VP")
-                            answer=str(noun)+" "+str(vp)
+                    for i,word in enumerate(best_sent):
+                        print(word,word.ent_iob_)
+                        if(word.ent_iob==3 and (word.lemma_ not in q_lemma)):
+                            end=i+1
+                            while(end<len(best_sent) and best_sent[end].ent_iob==1):
+                                end=end+1
+                            np=best_sent[i:end]
+                            answer=str(np)+" "+str(q[1:])
                             break
-                else:
+                    if(answer is None):
+                        for word in best_sent:
+                            if(word.lemma_=="be"):
+                                verb=word
+                if(answer is None and verb is not None):
                     print("verb is: ",verb)
                     bestscore=-1
                     for i in range(len(best_sent)-len(verb)+1):
@@ -54,9 +63,9 @@ class Document():
                         if(score>bestscore):
                             bestscore=score
                             vp=containing_type(best_sent[i],"VP")
-                            answer=str(noun)+" is "+str(vp)
-                if vp is None:
-                    print("error in finding VP")
+                            answer=str(noun)+" "+str(vp)
+                if answer is None:
+                    print("error in finding answer")
                     return
                 print("VP is: " ,vp)
                 print("Answer is: ",answer)
@@ -138,15 +147,14 @@ def load_file(path):
         return Document(text)
 
 answerer=load_file("../Course-Project-Data/set2/a5.txt")
-answerer.answer("What is Delta Cancri also known as?")
-answerer.answer("What is cancer bordered by?")
-#answerer.answer("What is the brightest star in Cancer?")
+#answerer.answer("What is Delta Cancri also known as?")
+#answerer.answer("What is cancer bordered by?")
+answerer.answer("What is the brightest star in Cancer?")
 answerer.answer("What is cancers astrological symbol?")
-#answerer.answer("Who placed the crab among the stars?")
-answerer.answer("What latitudes can cancer be seen at?")
+#answerer.answer("What latitudes can cancer be seen at?")
 answerer.answer("What open cluster is located right in the centre of cancer?")
-answerer.answer("What month was cancer associated with?")
-answerer.answer("What did Heracles battle?")
+#answerer.answer("What month was cancer associated with?")
+#answerer.answer("What did Heracles battle?")
 """
 s1="Cancer is a medium-sized constellation that is bordered by Gemini to the west, Lynx to the north, Leo Minor to the northeast, Leo to the east, Hydra to the south, and Canis Minor to the southwest."
 print(list(nlp(s1).sents)[0]._.parse_string)
