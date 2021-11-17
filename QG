@@ -1,0 +1,143 @@
+import os
+import spacy
+from spacy import displacy
+from spacy.matcher import Matcher
+from spacy.matcher import PhraseMatcher
+import benepar
+
+with open('gemini.txt', 'r',encoding='utf-8') as f:
+    gemini = f.read()
+nlp = spacy.load("en_core_web_lg")
+#nlp.add_pipe('benepar', config={'model': 'benepar_en3'})
+nlp.add_pipe(benepar.BeneparComponent("benepar_en3"))
+N=10
+
+
+doc = nlp(gemini)
+
+seen = set()
+
+##Segmenting the Data
+segments = []
+for sent in doc.sents:
+    heads = [cc for cc in sent.root.children if cc.dep_ == 'conj']
+
+    for head in heads:
+        words = [ww for ww in head.subtree]
+        for word in words:
+            seen.add(word)
+        chunk = (' '.join([ww.text for ww in words]))
+        segments.append( (head.i, chunk) )
+
+    unseen = [ww for ww in sent if ww not in seen]
+    chunk = ' '.join([ww.text for ww in unseen])
+    segments.append( (sent.root.i, chunk) )
+
+segments = sorted(segments, key=lambda x: x[0])
+
+names=[]
+sentences=[]
+##Getting names and sentences for Who questions
+for i,sent in segments:
+    a = nlp(sent)    
+    for ent in a.ents:
+        if(ent.label_ == "PERSON"):            
+            names.append(ent.text)
+            if sent not in sentences:
+                sentences.append(sent)
+###Generating Who questions
+questions = []
+date_entity=False
+mod=""
+for i,sent in segments:
+    doc_seg = nlp(sent)
+    seg = list(doc_seg.sents)[0]
+    lab=()
+    date_start=[]    
+    #vp_sent =""
+    for child in seg._.children:
+        lab = lab + child._.labels
+        #print(lab)
+    if lab==('NP','VP'):        
+        for child in seg._.children:
+            if 'VP' in child._.labels:                                
+                for token in child:
+                    date_entity=False
+                    if token.ent_type_=="DATE" or token.ent_type_=="TIME":                        
+                        vp_sent = child[:token.i-child.start-1]
+                        date_entity=True
+                        break
+
+            if 'NP' in child._.labels:                                
+                noun_sent = child    
+    if date_entity == True:
+        q = "When " + noun_sent.text+" " +vp_sent.text+"?"        
+        if q not in questions:
+            questions.append(q)                    
+
+    elif lab==('PP','NP','VP'):
+        for child in seg._.children:
+            if 'VP' in child._.labels:                
+                for token in child:
+                    if token.i-child.start==0 and token.tag_=="MD":                        
+                        mod = child[0].text                        
+                        vp_sent = child[1:]
+                    elif token.ent_type_=="DATE" or token.ent_type_=="TIME":                                                
+                        vp_sent = child[:token.i-child.start-1]
+                        date_entity=True
+                        break
+                    else :
+                        vp_sent=child
+                    
+            if 'NP' in child._.labels:                
+                noun_sent = child            
+        q = "When " + mod+ " "+ noun_sent.text+" " +vp_sent.text+"?"        
+        if q not in questions:
+            questions.append(q)   
+
+##Trying to add fluency            
+ques_final=[]
+for i in questions:
+    question = nlp(i)
+    q=[]
+    for token in question:
+        #print(token.i,token.text, token.lemma_, token.pos_,token.tag_,token.dep_,token.head,token.ent_type_)
+        if token.i==0 and token.head.tag_ in("VBZ" ,"VBP") and token.head.pos_!="AUX":
+            q.append(token.text)
+            q.insert(1,"does")
+        else:
+            if token.tag_=="NN" and token.dep_ == "nsubj":
+                q.append(token.lemma_)
+                q.insert(1,"is")
+            elif token.tag_=="VBZ":
+                q.append(token.lemma_)
+                #q.insert(1,"did")
+            else:
+                q.append(token.lower_)
+    ques_final.append(' '.join(q))
+
+##Replacer for 
+matcher = PhraseMatcher(nlp.vocab)
+patterns = [nlp.make_doc(text) for text in names]
+matcher.add("name matching",patterns)
+
+def replace_word(orig_text, replacement):
+    tok = nlp(orig_text)
+    text = ''
+    buffer_start = 0
+    for _, match_start, end in matcher(tok):        
+        text = text + replacement + tok[match_start].whitespace_ + tok[end:].text +"?"   # Replace token, with trailing whitespace if available        
+        #print(text)
+    return text
+    
+##Generating Who questions
+pre_question_sentence=[]
+who_questions = []
+
+for i in range(len(sentences)):
+    pre_question_sentence.append(sentences[i])
+    who_questions.append(replace_word(sentences[i],"Who"))
+ques_final.append(who_questions)
+
+for i in range(N):
+    print(ques_final[i])
